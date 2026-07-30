@@ -1,0 +1,4 @@
+django
+django_rest_framework
+requests
+django_cors_headers
