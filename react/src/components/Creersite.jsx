@@ -1,7 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
-import { createSite, saveFichier } from '../api';
+import { createSite, saveFichier, fetchMesSites, deleteSite, publishSite, fetchContenuSite } from '../api';
 
 function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite, theme = 'sombre', onChangerTheme }) {
   const fileInputRef = useRef(null);
@@ -13,14 +13,17 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
 `<!DOCTYPE html>
 <html lang="fr">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mon Site</title>
   <style>
     body { font-family: sans-serif; padding: 20px; background: #121212; color: #fff; }
     h1 { color: #00bcd4; }
   </style>
 </head>
 <body>
-  <h1>Projet Statique</h1>
-  <p>Bonjour, bienvenue sur votre nouveau site !</p>
+  <h1>Hello World !</h1>
+  <p>Bienvenue sur mon site CloudInst.</p>
 </body>
 </html>`
   );
@@ -30,8 +33,8 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
   const [erreur, setErreur] = useState('');
   const [siteAafficher, setSiteAafficher] = useState(null);
   const [siteEnEdition, setSiteEnEdition] = useState(null);
+  const [chargement, setChargement] = useState(false);
 
-  // Lecture du fichier téléversé localement
   const gererFichier = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -45,43 +48,111 @@ function CreerSite({ sites = [], onAjouterSite, onSupprimerSite, onModifierSite,
     }
   };
 
-  
-const handleSubmit = async (e) => {
-  e.preventDefault();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setErreur('');
+    setChargement(true);
 
-  if (!nomSite.trim()) {
-    setErreur('Veuillez donner un nom à votre projet.');
-    return;
+    if (!nomSite.trim()) {
+      setErreur('Veuillez donner un nom à votre projet.');
+      setChargement(false);
+      return;
+    }
+
+    const sousDomaine = nomSite
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-');
+
+    try {
+      const resSite = await createSite(sousDomaine, nomSite);
+      
+      if (resSite.erreur) {
+        setErreur(resSite.erreur);
+        setChargement(false);
+        return;
+      }
+
+      const resFichier = await saveFichier(resSite.id, 'index.html', code);
+      
+      if (resFichier.erreur) {
+        setErreur(resFichier.erreur);
+        setChargement(false);
+        return;
+      }
+
+      const data = await fetchMesSites();
+      if (data.sites && onAjouterSite) {
+        onAjouterSite(data.sites);
+      }
+
+      setNomSite('');
+      setFichierImporte(null);
+      setErreur('');
+      setModeRedaction(false);
+
+    } catch (error) {
+      setErreur("Erreur lors de la création du site.");
+    } finally {
+      setChargement(false);
+    }
+  };
+
+  const handleDeleteSite = async (siteId) => {
+    if (window.confirm('Êtes-vous sûr de vouloir supprimer ce site ?')) {
+      try {
+        const res = await deleteSite(siteId);
+        if (res.message) {
+          onSupprimerSite(siteId);
+        } else {
+          setErreur(res.erreur || "Erreur lors de la suppression");
+        }
+      } catch (error) {
+        setErreur("Impossible de supprimer le site");
+      }
+    }
+  };
+
+  const handlePublishSite = async (site) => {
+    try {
+      const res = await publishSite(site.id);
+      if (res.publication !== undefined) {
+        const data = await fetchMesSites();
+        if (data.sites) {
+          onAjouterSite(data.sites);
+        }
+      } else {
+        setErreur(res.erreur || "Erreur lors de la publication");
+      }
+    } catch (error) {
+      setErreur("Impossible de modifier la visibilité");
+    }
+  };
+
+  const voirSite = async (site) => {
+    setChargement(true);
+    try {
+      const contenu = await fetchContenuSite(site.sous_domaine);
+      setSiteAafficher({ ...site, code: contenu });
+    } catch (error) {
+      setErreur("Impossible de charger le site");
+    } finally {
+      setChargement(false);
+    }
+  };
+
+const handleMultipleFiles = async (files) => {
+  for (const file of files) {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      await saveFichier(site.id, file.name, e.target.result);
+    };
+    reader.readAsText(file);
   }
-
-  // Le backend attend un "sous_domaine", pas juste un "nom" -- 
-  // il faut en générer un (slug) à partir du nom du site
-  const sousDomaine = nomSite
-    .trim()
-    .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // enlève les accents
-    .replace(/[^a-z0-9-]/g, '-')
-    .replace(/-+/g, '-');
-
-  const resSite = await createSite(sousDomaine, nomSite);
-
-  if (resSite.erreur) {
-    setErreur(resSite.erreur);
-    return;
-  }
-
-  // Une fois le site créé, on enregistre le code dans index.html
-  await saveFichier(resSite.id, 'index.html', code);
-
-  // On prévient le parent pour qu'il recharge la vraie liste depuis le serveur
-  if (onAjouterSite) {
-    onAjouterSite(resSite);
-  }
-
-  setNomSite('');
-  setFichierImporte(null);
-  setErreur('');
-  setModeRedaction(false);
+  toast.success(`${files.length} fichiers importés !`);
 };
 
   const styles = {
@@ -184,7 +255,6 @@ const handleSubmit = async (e) => {
 
         {erreur && <div style={styles.erreurBox}>{erreur}</div>}
 
-        {/* Panneau de saisie / importation */}
         <div style={styles.cardPanel}>
           <div style={{ marginBottom: '20px', display: 'flex', gap: '15px', alignItems: 'center' }}>
             <label style={{ color: estSombre ? '#888' : '#666' }}>Visibilité du projet :</label>
@@ -226,10 +296,11 @@ const handleSubmit = async (e) => {
                   style={styles.input}
                 />
                 <button style={styles.btnCancel} onClick={() => setModeRedaction(false)}>Masquer l'éditeur</button>
-                <button style={styles.btnPrimary} onClick={handleSubmit}>Enregistrer & Publier</button>
+                <button style={styles.btnPrimary} onClick={handleSubmit} disabled={chargement}>
+                  {chargement ? 'Enregistrement...' : 'Enregistrer & Publier'}
+                </button>
               </div>
 
-              {/* Éditeur et aperçu en direct */}
               <div style={styles.editorGrid}>
                 <div style={styles.editorBox}>
                   <Editor height="100%" defaultLanguage="html" theme={estSombre ? "vs-dark" : "light"} value={code} onChange={(val) => setCode(val || '')} />
@@ -242,7 +313,6 @@ const handleSubmit = async (e) => {
           )}
         </div>
 
-        {/* Liste personnelle des projets */}
         <h2 style={styles.sectionTitle}>Tous mes projets créés</h2>
 
         {sites.length === 0 ? (
@@ -252,30 +322,38 @@ const handleSubmit = async (e) => {
             {sites.map((site) => (
               <div key={site.id} style={styles.card}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 style={styles.cardTitle}>{site.nom}</h3>
-                  <span style={styles.badgeVisibilite(site.visibilite)}>
-                    {site.visibilite === 'public' ? 'Public' : 'Privé'}
+                  <h3 style={styles.cardTitle}>{site.titre || site.sous_domaine}</h3>
+                  <span style={styles.badgeVisibilite(site.publication ? 'public' : 'prive')}>
+                    {site.publication ? 'Public' : 'Privé'}
                   </span>
                 </div>
-                <p style={{ fontSize: '0.8rem', color: estSombre ? '#666666' : '#888888', margin: 0 }}>Créé le : {site.dateCreation}</p>
+                <p style={{ fontSize: '0.8rem' }}>
+                  Créé le : {new Date(site.date_creation).toLocaleDateString('fr-FR')}
+                </p>
+                <p style={{ fontSize: '0.8rem', color: estSombre ? '#666666' : '#888888', margin: 0 }}>
+                  Visites : {site.nb_visites || 0}
+                </p>
 
-                <button style={{ color: '#00bcd4', background: 'none', border: 'none', textAlign: 'left', padding: 0, cursor: 'pointer', fontSize: '0.9rem', fontWeight: 'bold' }} onClick={() => setSiteAafficher(site)}>
+                <button 
+                  style={{ color: '#00bcd4', background: 'none', border: 'none', textAlign: 'left', padding: 0, cursor: 'pointer', fontSize: '0.9rem', fontWeight: 'bold' }} 
+                  onClick={() => voirSite(site)}
+                >
                   Voir le site
                 </button>
 
                 <div style={styles.actionsRow}>
                   <button
                     style={styles.btnToggleVis}
-                    onClick={() => onModifierSite({ ...site, visibilite: site.visibilite === 'public' ? 'prive' : 'public' })}
+                    onClick={() => handlePublishSite(site)}
                   >
-                    Rendre {site.visibilite === 'public' ? 'Privé' : 'Public'}
+                    Rendre {site.publication ? 'Privé' : 'Public'}
                   </button>
 
                   <button style={styles.btnEdit} onClick={() => setSiteEnEdition(site)}>
                     Modifier
                   </button>
 
-                  <button style={styles.btnDelete} onClick={() => onSupprimerSite(site.id)}>
+                  <button style={styles.btnDelete} onClick={() => handleDeleteSite(site.id)}>
                     Supprimer
                   </button>
                 </div>
@@ -285,22 +363,20 @@ const handleSubmit = async (e) => {
         )}
       </div>
 
-      {/* Rendu modal plein écran */}
       {siteAafficher && (
         <div style={styles.modalPleinEcran}>
           <div style={styles.modalBarreNav}>
-            <span style={{ color: '#00bcd4', fontWeight: 'bold' }}>Aperçu : {siteAafficher.nom}</span>
+            <span style={{ color: '#00bcd4', fontWeight: 'bold' }}>Aperçu : {siteAafficher.titre || siteAafficher.sous_domaine}</span>
             <button style={{ backgroundColor: '#ef4444', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer' }} onClick={() => setSiteAafficher(null)}>Fermer ✕</button>
           </div>
-          <iframe srcDoc={siteAafficher.code} title={siteAafficher.nom} sandbox="allow-scripts" style={{ width: '100%', height: '100%', border: 'none', backgroundColor: '#fff' }} />
+          <iframe srcDoc={siteAafficher.code || '<p>Contenu non disponible</p>'} title={siteAafficher.titre || siteAafficher.sous_domaine} sandbox="allow-scripts" style={{ width: '100%', height: '100%', border: 'none', backgroundColor: '#fff' }} />
         </div>
       )}
 
-      {/* Modal d'édition de projet */}
       {siteEnEdition && (
         <div style={styles.modalPleinEcran}>
           <div style={styles.modalBarreNav}>
-            <span style={{ color: '#00bcd4', fontWeight: 'bold' }}>Modification du site : {siteEnEdition.nom}</span>
+            <span style={{ color: '#00bcd4', fontWeight: 'bold' }}>Modification du site : {siteEnEdition.titre || siteEnEdition.sous_domaine}</span>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button style={{ backgroundColor: '#00bcd4', color: '#000', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }} onClick={() => { onModifierSite(siteEnEdition); setSiteEnEdition(null); }}>Enregistrer les modifications</button>
               <button style={{ backgroundColor: '#333', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer' }} onClick={() => setSiteEnEdition(null)}>Annuler</button>

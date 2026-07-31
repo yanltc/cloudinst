@@ -1,4 +1,8 @@
-django
-django_rest_framework
-requests
-django_cors_headers
+Django>=4.2.0
+djangorestframework>=3.14.0
+django-cors-headers>=4.0.0
+bleach>=6.0.0
+python-dotenv>=1.0.0
+# Redis pour la production (optionnel)
+# django-redis>=5.3.0
+# redis>=5.0.0

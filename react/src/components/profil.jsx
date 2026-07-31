@@ -1,33 +1,44 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { fetchProfil, logoutUser } from '../api';
 
-function Profil({ utilisateur, nombreSites, onDeconnexion, theme = 'sombre', onChangerTheme }) {
+function Profil({ onDeconnexion, theme = 'sombre', onChangerTheme }) {
   const navigate = useNavigate();
   const estSombre = theme === 'sombre';
+  
+  const [profil, setProfil] = useState(null);
+  const [chargement, setChargement] = useState(true);
+  const [erreur, setErreur] = useState('');
 
-const handleDeconnexionClick = async () => {
-    // 1. On récupère le token du localStorage
+  useEffect(() => {
+    const chargerProfil = async () => {
+      try {
+        const data = await fetchProfil();
+        if (data.username) {
+          setProfil(data);
+        } else {
+          setErreur("Impossible de charger le profil");
+        }
+      } catch (error) {
+        setErreur("Erreur lors du chargement du profil");
+      } finally {
+        setChargement(false);
+      }
+    };
+    chargerProfil();
+  }, []);
+
+  const handleDeconnexionClick = async () => {
     const token = localStorage.getItem('token');
-
-    // 2. On appelle Django si le token existe
     if (token) {
       try {
-        await fetch('http://127.0.0.1:8000/deconnexion/', { // Ajuste l'URL au besoin
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Token ${token}`,
-          },
-        });
+        await logoutUser();
       } catch (error) {
         console.error("Erreur lors de la déconnexion :", error);
       }
     }
-
-    // 3. On supprime le token localement
     localStorage.removeItem('token');
-
-    // 4. Tes fonctions de redirection actuelles
+    localStorage.removeItem('username');
     if (onDeconnexion) {
       onDeconnexion();
     }
@@ -44,7 +55,7 @@ const handleDeconnexionClick = async () => {
     },
     navbar: {
       display: 'flex',
-      justify: 'space-between',
+      justifyContent: 'space-between',
       alignItems: 'center',
       padding: '20px 40px',
       borderBottom: `1px solid ${estSombre ? '#111111' : '#e5e5e5'}`,
@@ -86,8 +97,46 @@ const handleDeconnexionClick = async () => {
       fontSize: '1.1rem',
       fontWeight: 'bold'
     },
-    btnDeconnexion: { width: '100%', backgroundColor: '#ef4444', color: '#ffffff', border: 'none', padding: '12px', borderRadius: '10px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer', marginTop: '10px' }
+    infoText: {
+      width: '100%',
+      textAlign: 'left',
+      fontSize: '0.9rem',
+      color: estSombre ? '#888888' : '#666666',
+      margin: '5px 0'
+    },
+    btnDeconnexion: { 
+      width: '100%', 
+      backgroundColor: '#ef4444', 
+      color: '#ffffff', 
+      border: 'none', 
+      padding: '12px', 
+      borderRadius: '10px', 
+      fontWeight: 'bold', 
+      fontSize: '1rem', 
+      cursor: 'pointer', 
+      marginTop: '10px' 
+    }
   };
+
+  if (chargement) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.mainContent}>
+          <p style={{ color: estSombre ? '#fff' : '#000' }}>Chargement du profil...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (erreur) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.mainContent}>
+          <p style={{ color: '#ef4444' }}>{erreur}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.container}>
@@ -105,12 +154,24 @@ const handleDeconnexionClick = async () => {
       <main style={styles.mainContent}>
         <div style={styles.userCard}>
           <div>
-            <h1 style={styles.userName}>{utilisateur?.nom || 'Mon Profil'}</h1>
-            <p style={styles.userEmail}>{utilisateur?.email || 'utilisateur@example.com'}</p>
+            <h1 style={styles.userName}>{profil?.username || 'Utilisateur'}</h1>
+            <p style={styles.userEmail}>{profil?.email || 'Email non défini'}</p>
+            <p style={{ color: estSombre ? '#666' : '#999', fontSize: '0.85rem', marginTop: '5px' }}>
+              Inscrit le : {profil?.date_inscription ? new Date(profil.date_inscription).toLocaleDateString('fr-FR') : 'Date inconnue'}
+            </p>
           </div>
 
           <div style={styles.statsBadge}>
-            {nombreSites} site{nombreSites > 1 ? 's' : ''} créé{nombreSites > 1 ? 's' : ''}
+            {profil?.nombre_sites || 0} site{(profil?.nombre_sites || 0) > 1 ? 's' : ''} créé{(profil?.nombre_sites || 0) > 1 ? 's' : ''}
+          </div>
+
+          <div style={{ width: '100%', textAlign: 'left' }}>
+            <p style={styles.infoText}>
+              Fichiers : {profil?.nombre_fichiers || 0}
+            </p>
+            <p style={styles.infoText}>
+              Espace utilisé : {Math.round((profil?.espace_utilise || 0) / 1024 / 1024)} Mo / {Math.round((profil?.espace_max || 50) / 1024 / 1024)} Mo
+            </p>
           </div>
 
           <button style={styles.btnDeconnexion} onClick={handleDeconnexionClick}>

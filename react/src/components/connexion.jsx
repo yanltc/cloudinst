@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { loginUser } from '../api';
 
 function Connexion({ onLogin }) {
   const navigate = useNavigate();
 
-  // États du formulaire
   const [formData, setFormData] = useState({
     username: '',
     motDePasse: '',
@@ -14,7 +14,6 @@ function Connexion({ onLogin }) {
   const [voirMotDePasse, setVoirMotDePasse] = useState(false);
   const [chargement, setChargement] = useState(false);
 
-  // Gestion des saisies
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
@@ -24,47 +23,34 @@ function Connexion({ onLogin }) {
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  setErreur('');
+    e.preventDefault();
+    setErreur('');
 
-  if (!formData.username.trim() || !formData.motDePasse.trim()) {
-    setErreur("Veuillez remplir tous les champs.");
-    return;
-  }
-
-  setChargement(true);
-
-  try {
-    const response = await fetch('http://127.0.0.1:8000/connexion/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: formData.username,
-        password: formData.motDePasse,
-      }),
-    });
-
-    const data = await response.json();
-    setChargement(false);
-
-    if (!response.ok) {
-      setErreur(data.erreur || "Identifiants incorrects.");
+    if (!formData.username.trim() || !formData.motDePasse.trim()) {
+      setErreur("Veuillez remplir tous les champs.");
       return;
     }
 
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('username', data.username);
+    setChargement(true);
 
-    if (onLogin) onLogin(true);
-    navigate('/accueil');
+    try {
+      const data = await loginUser(formData.username, formData.motDePasse);
+      setChargement(false);
 
-  } catch (error) {
-    setChargement(false);
-    setErreur("Impossible de contacter le serveur.");
-  }
-};
+      if (data.token) {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('username', data.username);
+        if (onLogin) onLogin(true);
+        navigate('/accueil');
+      } else {
+        setErreur(data.erreur || "Identifiants incorrects.");
+      }
+    } catch (error) {
+      setChargement(false);
+      setErreur("Impossible de contacter le serveur.");
+    }
+  };
 
-  // --- STYLES DIVISÉS (SPLIT-SCREEN SANS EMOJIS) ---
   const styles = {
     container: {
       display: 'flex',
@@ -73,8 +59,6 @@ function Connexion({ onLogin }) {
       color: '#ffffff',
       fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
     },
-
-    /* --- CÔTÉ GAUCHE : PRÉSENTATION --- */
     leftSection: {
       flex: 1,
       backgroundColor: '#0a0a0a',
@@ -122,8 +106,6 @@ function Connexion({ onLogin }) {
       margin: 0,
       lineHeight: '1.5',
     },
-
-    /* --- CÔTÉ DROIT : FORMULAIRE --- */
     rightSection: {
       flex: 1,
       display: 'flex',
@@ -223,7 +205,6 @@ function Connexion({ onLogin }) {
 
   return (
     <div style={styles.container}>
-      {/* PARTIE GAUCHE : PRÉSENTATION DES FONCTIONNALITÉS */}
       <div style={styles.leftSection}>
         <div style={styles.leftContent}>
           <h1 style={styles.brandTitle}>cloudlnst</h1>
@@ -256,7 +237,6 @@ function Connexion({ onLogin }) {
         </div>
       </div>
 
-      {/* PARTIE DROITE : FORMULAIRE */}
       <div style={styles.rightSection}>
         <div style={styles.formBox}>
           <div style={styles.formHeader}>
