@@ -10,7 +10,7 @@ SECRET_KEY = 'django-insecure-f@=238ypx%uo$^zhax)!9&9-v+gkxvux3yb3#oe1s5*y&$h0m5
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['lvh.me', 'localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['cloudinst-back.onrender.com', 'localhost', '127.0.0.1']
 
 # Application definition
 INSTALLED_APPS = [
