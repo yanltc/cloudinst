@@ -8,7 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-f@=238ypx%uo$^zhax)!9&9-v+gkxvux3yb3#oe1s5*y&$h0m5'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ['cloudinst-back.onrender.com', 'localhost', '127.0.0.1']
 
